@@ -118,11 +118,6 @@ async function processFile(file) {
                 const inTime = inMins !== null ? formatMinutesTo24h(inMins) : inTimeRaw;
                 const outTime = outMins !== null ? formatMinutesTo24h(outMins) : outTimeRaw;
 
-                let lunch = String(row['Lunch'] || '').trim();
-                if (!lunch) {
-                    lunch = 'NA';
-                }
-
                 let shift = String(row['Shift'] || '').trim();
                 if (shift === 'G') {
                     shift = null;
@@ -135,7 +130,10 @@ async function processFile(file) {
                     shiftOut = SHIFT_DEFINITIONS[shift].shiftOut;
                 }
 
-                const calc = calculateHours(inTime, outTime);
+                const calc = calculateHours(inTime, outTime, shift, shiftIn);
+
+                const formattedDutyIn = calc.dutyInMins !== null ? formatMinutesTo24h(calc.dutyInMins) : '';
+                const formattedDutyOut = calc.dutyOutMins !== null ? formatMinutesTo24h(calc.dutyOutMins) : '';
 
                 return {
                     'SL.NO.': allProcessedData.length + index + 1,
@@ -148,7 +146,8 @@ async function processFile(file) {
                     'Shift-Out': shiftOut,
                     'In-Time': inTime,
                     'Out-Time': outTime,
-                    'Lunch': lunch,
+                    'dutyIn': formattedDutyIn,
+                    'dutyOut': formattedDutyOut,
                     'Working Hours': calc.netHours
                 };
             });
@@ -168,21 +167,38 @@ async function processFile(file) {
     }
 }
 
-function calculateHours(inTimeStr, outTimeStr) {
+function calculateHours(inTimeStr, outTimeStr, shiftStr, shiftInStr) {
     if (!inTimeStr || !outTimeStr || String(inTimeStr).toLowerCase() === 'off' || String(outTimeStr).toLowerCase() === 'off') {
-        return { netHours: 0 };
+        return { dutyInMins: null, dutyOutMins: null, netHours: 0 };
     }
 
     // Attempt to parse manually (hh:mm AM/PM)
     const inMins = parseTimeFormatToMinutes(inTimeStr);
     const outMins = parseTimeFormatToMinutes(outTimeStr);
+    const shiftInMins = shiftInStr ? parseTimeFormatToMinutes(shiftInStr) : null;
 
     if (inMins === null || outMins === null) {
-        return { lunchHours: 0, netHours: 0 };
+        return { dutyInMins: null, dutyOutMins: null, netHours: 0 };
+    }
+
+    let dutyInMins = inMins;
+    let dutyOutMins = outMins;
+
+    if (shiftStr === 'C') {
+        dutyInMins = Math.ceil(inMins / 30) * 30;
+        dutyOutMins = Math.floor(outMins / 30) * 30;
+    } else if (shiftInMins !== null) {
+        if (inMins <= shiftInMins + 15) {
+            dutyInMins = shiftInMins;
+        } else {
+            dutyInMins = Math.ceil(inMins / 30) * 30;
+        }
+
+        dutyOutMins = Math.floor(outMins / 30) * 30;
     }
 
     // If outTime is smaller, it crossed midnight (next day)
-    let diffMins = outMins - inMins;
+    let diffMins = dutyOutMins - dutyInMins;
     if (diffMins < 0) {
         diffMins += 24 * 60;
     }
@@ -193,6 +209,8 @@ function calculateHours(inTimeStr, outTimeStr) {
     const netHours = totalHours;
 
     return {
+        dutyInMins,
+        dutyOutMins,
         netHours: parseFloat(netHours.toFixed(2))
     };
 }
@@ -257,7 +275,8 @@ function renderTable() {
             <td>${row['Shift-Out']}</td>
             <td>${row['In-Time']}</td>
             <td>${row['Out-Time']}</td>
-            <td>${row['Lunch']}</td>
+            <td>${row['dutyIn']}</td>
+            <td>${row['dutyOut']}</td>
             <td class="highlight-hours">${row['Working Hours']}</td>
         `;
         tableBody.appendChild(tr);
@@ -281,7 +300,8 @@ function exportToExcel() {
         { wch: 10 }, // Shift-Out
         { wch: 10 }, // In
         { wch: 10 }, // Out
-        { wch: 8 },  // Lunch
+        { wch: 10 }, // dutyIn
+        { wch: 10 }, // dutyOut
         { wch: 15 }  // Working Hours
     ];
     worksheet['!cols'] = colWidths;
