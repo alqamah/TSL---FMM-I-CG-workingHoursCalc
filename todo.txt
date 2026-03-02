@@ -1,1 +1,3 @@
 Fix shift allocation for w1. 
+Add search bar
+Add download btn

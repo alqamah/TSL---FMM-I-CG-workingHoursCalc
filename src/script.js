@@ -7,12 +7,14 @@ const fileCountBadge = document.getElementById('fileCountBadge');
 const dataTable = document.getElementById('dataTable');
 const tableBody = document.getElementById('tableBody');
 const exportBtn = document.getElementById('exportBtn');
+const searchInput = document.getElementById('searchInput');
 
 let allProcessedData = [];
 
 // Listen for file selections
 fileInput.addEventListener('change', handleFileSelect);
 exportBtn.addEventListener('click', exportToExcel);
+if (searchInput) searchInput.addEventListener('input', renderTable);
 
 async function handleFileSelect(event) {
     const files = Array.from(event.target.files);
@@ -118,7 +120,7 @@ async function processFile(file) {
                 const inTime = inMins !== null ? formatMinutesTo24h(inMins) : inTimeRaw;
                 const outTime = outMins !== null ? formatMinutesTo24h(outMins) : outTimeRaw;
 
-                let shift = String(row['Shift'] || '').trim();
+                let shift = String(row['Shift'] || '').trim().toUpperCase();
                 // if (shift === 'G') {
                 //     shift = null;
                 // }
@@ -217,7 +219,7 @@ function calculateHours(inTimeStr, outTimeStr, shiftStr, shiftInStr) {
     let otHours = totalHours > 8 ? totalHours - 8 : 0;
     let dutyHours = totalHours - otHours;
 
-    if(dutyOutMins-dutyInMins<30){
+    if (dutyOutMins - dutyInMins < 30) {
         netHours = 0;
         otHours = 0;
         dutyHours = 0;
@@ -278,8 +280,29 @@ function renderTable() {
 
     tableBody.innerHTML = ''; // clear empty state
 
-    // Render first 100 rows to keep DOM fast? Or render all depending on size. Let's do all.
-    allProcessedData.forEach(row => {
+    const query = searchInput ? searchInput.value.toLowerCase().trim() : '';
+
+    const filteredData = allProcessedData.filter(row => {
+        if (!query) return true;
+        const searchStr = `${row['Safety Pass No']} ${row['Employee Name']} ${row['Vendor Code']} ${row['Shift']}`.toLowerCase();
+        return searchStr.includes(query);
+    });
+
+    if (filteredData.length === 0) {
+        tableBody.innerHTML = `
+            <tr class="empty-state-row">
+                <td colspan="15">
+                    <div class="empty-state">
+                        <p>NO MATCHING RECORDS FOUND</p>
+                    </div>
+                </td>
+            </tr>
+        `;
+        return;
+    }
+
+    // Render filtered rows
+    filteredData.forEach(row => {
         const tr = document.createElement('tr');
         tr.innerHTML = `
             <td>${row['SL.NO.']}</td>
