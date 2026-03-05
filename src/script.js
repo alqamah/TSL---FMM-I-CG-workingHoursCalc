@@ -7,12 +7,14 @@ const fileCountBadge = document.getElementById('fileCountBadge');
 const dataTable = document.getElementById('dataTable');
 const tableBody = document.getElementById('tableBody');
 const exportBtn = document.getElementById('exportBtn');
+const searchInput = document.getElementById('searchInput');
 
 let allProcessedData = [];
 
 // Listen for file selections
 fileInput.addEventListener('change', handleFileSelect);
 exportBtn.addEventListener('click', exportToExcel);
+if (searchInput) searchInput.addEventListener('input', renderTable);
 
 async function handleFileSelect(event) {
     const files = Array.from(event.target.files);
@@ -118,10 +120,10 @@ async function processFile(file) {
                 const inTime = inMins !== null ? formatMinutesTo24h(inMins) : inTimeRaw;
                 const outTime = outMins !== null ? formatMinutesTo24h(outMins) : outTimeRaw;
 
-                let shift = String(row['Shift'] || '').trim();
-                // if (shift === 'G') {
-                //     shift = null;
-                // }
+                let shift = String(row['Shift'] || '').trim().toUpperCase();
+                const employeeId = String(row['Safety Pass No'] || '').trim();
+
+                shift = assignShift(employeeId, shift);
 
                 let shiftIn = '';
                 let shiftOut = '';
@@ -150,7 +152,7 @@ async function processFile(file) {
                     'Duty-Out': formattedDutyOut === undefined ? 'N/A' : formattedDutyOut,
                     'Duty-Hours': calc.dutyHours === undefined ? 'N/A' : calc.dutyHours,
                     'OT-Hours': calc.otHours === undefined ? 'N/A' : calc.otHours,
-                    'TOTAL-WORKING-HOURS': calc.netHours === undefined ? 'N/A' : calc.netHours,
+                    'NET-HOURS': calc.netHours === undefined ? 'N/A' : calc.netHours,
                 };
             });
 
@@ -206,8 +208,10 @@ function calculateHours(inTimeStr, outTimeStr, shiftStr, shiftInStr) {
 
     // If outTime is smaller, it crossed midnight (next day)
     let diffMins = dutyOutMins - dutyInMins;
-    if (diffMins < 0) {
+    if (outMins < inMins) {
         diffMins += 24 * 60;
+    } else if (diffMins < 0) {
+        diffMins = 0;
     }
 
     let totalHours = diffMins / 60;
@@ -217,7 +221,7 @@ function calculateHours(inTimeStr, outTimeStr, shiftStr, shiftInStr) {
     let otHours = totalHours > 8 ? totalHours - 8 : 0;
     let dutyHours = totalHours - otHours;
 
-    if(dutyOutMins-dutyInMins<30){
+    if (diffMins < 30) {
         netHours = 0;
         otHours = 0;
         dutyHours = 0;
@@ -230,6 +234,14 @@ function calculateHours(inTimeStr, outTimeStr, shiftStr, shiftInStr) {
         otHours: parseFloat(otHours.toFixed(2)),
         dutyHours: parseFloat(dutyHours.toFixed(2))
     };
+}
+
+// assigns shift - for assigning custom shift to Drivers
+function assignShift(employeeId, currentShift) {
+    if (!DRIVERS.includes(employeeId) && currentShift === 'G') {
+        return 'W1';
+    }
+    return currentShift;
 }
 
 // Converts standard "hh:mm AM/PM" format to minutes since midnight
@@ -255,7 +267,6 @@ function formatMinutesTo24h(totalMinutes) {
 }
 
 // Date normalization function 
-// Normalizes various formats string to DD-MM-YYYY or DD-MMM-YYYY based on needs
 function normalizeDate(dateStr) {
     if (!dateStr) return 'N/A';
 
@@ -278,55 +289,56 @@ function renderTable() {
 
     tableBody.innerHTML = ''; // clear empty state
 
-    // Render first 100 rows to keep DOM fast? Or render all depending on size. Let's do all.
-    allProcessedData.forEach(row => {
+    const query = searchInput ? searchInput.value.toLowerCase().trim() : '';
+
+    const filteredData = allProcessedData.filter(row => {
+        if (!query) return true;
+        const searchStr = `${row['Safety Pass No']} ${row['Employee Name']} ${row['Vendor Code']} ${row['Shift']}`.toLowerCase();
+        return searchStr.includes(query);
+    });
+
+    if (filteredData.length === 0) {
+        tableBody.innerHTML = `
+            <tr class="empty-state-row">
+                <td colspan="15">
+                    <div class="empty-state">
+                        <p>NO MATCHING RECORDS FOUND</p>
+                    </div>
+                </td>
+            </tr>
+        `;
+        return;
+    }
+
+    // Render filtered rows
+    filteredData.forEach(row => {
         const tr = document.createElement('tr');
         tr.innerHTML = `
             <td>${row['SL.NO.']}</td>
             <td>${row['Date']}</td>
             <td>${row['Safety Pass No']}</td>
             <td>${row['Employee Name']}</td>
-            <td>${row['Vendor Code']}</td>
+            <!-- <td>${row['Vendor Code']}</td> -->
             <td>${row['Shift']}</td>
             <td>${row['Shift-In']}</td>
             <td>${row['Shift-Out']}</td>
             <td>${row['In-Time']}</td>
             <td>${row['Out-Time']}</td>
-            <td>${row['Duty-In']}</td>
-            <td>${row['Duty-Out']}</td>
+            <!-- <td>${row['Duty-In']}</td> -->
+            <!-- <td>${row['Duty-Out']}</td> -->
             <td>${row['Duty-Hours']}</td>
             <td>${row['OT-Hours']}</td>
-            <td class="highlight-hours">${row['TOTAL-WORKING-HOURS']}</td>
+            <td class="highlight-hours">${row['NET-HOURS']}</td>
         `;
         tableBody.appendChild(tr);
     });
 }
 
+//excel export fn
 function exportToExcel() {
     if (allProcessedData.length === 0) return;
 
     const worksheet = XLSX.utils.json_to_sheet(allProcessedData);
-
-    // Optional: Auto-size columns slightly
-    const colWidths = [
-        { wch: 8 },  // SL NO
-        { wch: 12 }, // Date
-        { wch: 15 }, // ID
-        { wch: 25 }, // Name
-        { wch: 10 }, // VC
-        { wch: 6 },  // Shift
-        { wch: 10 }, // Shift-In
-        { wch: 10 }, // Shift-Out
-        { wch: 10 }, // In
-        { wch: 10 }, // Out
-        { wch: 10 }, // Duty-In
-        { wch: 10 }, // Duty-Out
-        { wch: 10 }, // Duty-Hours
-        { wch: 10 }, // OT-Hours
-        { wch: 22 }  // TOTAL-WORKING-HOURS
-    ];
-    worksheet['!cols'] = colWidths;
-
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, "Processed Attendance");
 
