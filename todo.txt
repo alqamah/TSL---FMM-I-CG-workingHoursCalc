@@ -20,4 +20,6 @@ Drivers:
 Perform search only on Name, ID and Date
 
 v3.0
-05/03: shift allocation logic for drivers is not working for C Shift + OT. Need to hardcode the shift allocation for C shift wrt duty in-out time.
+05/03:
+1. shift allocation logic for drivers is not working for C Shift + OT. Need to hardcode the shift allocation for C shift wrt duty in-out time.
+2. for shifts G and W1, deduct 1h lunch from duty hours.
