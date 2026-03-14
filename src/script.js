@@ -340,6 +340,14 @@ function renderTable() {
     });
 }
 
+function employeewiseTotalHours(){
+    
+}
+
+function skillwiseTotalHours(){
+    
+}
+
 //excel export fn
 function exportToExcel() {
     if (allProcessedData.length === 0) return;
