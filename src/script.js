@@ -18,6 +18,37 @@ exportBtn.addEventListener('click', exportToExcel);
 if (searchInput) searchInput.addEventListener('input', renderTable);
 if (addLunchCheckbox) addLunchCheckbox.addEventListener('change', reprocessData);
 
+//data structure blueprint for employess
+/*
+let employeeData = [
+    {
+        date: from Uploaded file
+        sp_no: from Uploaded file
+        name: from Uploaded file
+        vendor_name: from Uploaded file
+        workorder_no: from Uploaded file
+        dept_name: from Uploaded file
+        section: from Uploaded file
+        skill: from persistent_data
+        designation: from persistent_data   
+        shiftsAllowed[]: from persistent_data
+        shift: after assignShift()
+        shiftIn: after assignShift()
+        shiftOut: after assignShift()
+        punchIn: from Uploaded file
+        punchOut: from Uploaded file
+        dutyIn: after calculateHours()
+        dutyOut: after calculateHours()
+        addLunch: from addLunch button/flag
+        dutyHours: from calculateHours()
+        otHours: from calculateHours()
+        totalHours: from calculateHours()        
+    }
+]
+*/
+
+
+//IP FNS
 //file upload
 async function handleFileSelect(event) {
     const files = Array.from(event.target.files);
@@ -39,9 +70,9 @@ async function handleFileSelect(event) {
     // Render the processed data
     renderTable();
 
-    if (allProcessedData.length > 0) {
+    if (employeeData.length > 0) {
         exportBtn.disabled = false;
-        
+
         const btnEmployeeTotal = document.getElementById('btnEmployeeTotal');
         const btnSkillTotal = document.getElementById('btnSkillTotal');
         if (btnEmployeeTotal) btnEmployeeTotal.style.display = 'block';
@@ -134,7 +165,8 @@ async function processFile(file) {
                 const inTime = inMins !== null ? formatMinutesTo24h(inMins) : inTimeRaw;
                 const outTime = outMins !== null ? formatMinutesTo24h(outMins) : outTimeRaw;
 
-                let shift = String(row['Shift'] || '').trim().toUpperCase();
+                // Shift data is no longer extracted from the file; custom calculation will answer this later
+                let shift = '';
                 const employeeId = String(row['Safety Pass No'] || '').trim();
 
                 shift = assignShift(employeeId, shift);
@@ -153,29 +185,32 @@ async function processFile(file) {
                 const formattedDutyOut = calc.dutyOutMins !== null ? formatMinutesTo24h(calc.dutyOutMins) : '';
 
                 return {
-                    'SL.NO.': allProcessedData.length + index + 1,
-                    'Date': normalizedDate,
-                    'Safety Pass No': row['Safety Pass No'] || '',
-                    'Skill Level': typeof EMPLOYEE_SKILLS !== 'undefined' && EMPLOYEE_SKILLS[row['Safety Pass No']] ? EMPLOYEE_SKILLS[row['Safety Pass No']] : 'Unknown',
-                    'Employee Name': row['Employee Name'] || '',
-                    'Vendor Code': row['Vendor Code'] || '',
-                    'Shift': shift === null ? '' : shift,
-                    'Shift-In': shiftIn === undefined ? 'N/A' : shiftIn,
-                    'Shift-Out': shiftOut === undefined ? 'N/A' : shiftOut,
-                    'In-Time': inTime === undefined ? 'N/A' : inTime,
-                    'Out-Time': outTime === undefined ? 'N/A' : outTime,
-                    'Duty-In': formattedDutyIn === undefined ? 'N/A' : formattedDutyIn,
-                    'Duty-Out': formattedDutyOut === undefined ? 'N/A' : formattedDutyOut,
-                    'Duty-Hours': calc.dutyHours === undefined ? 'N/A' : calc.dutyHours,
-                    'OT-Hours': calc.otHours === undefined ? 'N/A' : calc.otHours,
-                    'NET-HOURS': calc.netHours === undefined ? 'N/A' : calc.netHours,
+                    date: normalizedDate,
+                    sp_no: employeeId,
+                    name: row['Employee Name'] || '',
+                    vendor_name: row['Vendor Name'] || '',
+                    workorder_no: row['Workorder No'] || '',
+                    dept_name: row['Department Name'] || '',
+                    section: row['Section'] || '',
+                    skill: typeof EMPLOYEE_SKILLS !== 'undefined' && EMPLOYEE_SKILLS[employeeId] ? EMPLOYEE_SKILLS[employeeId] : 'Unknown',
+                    designation: typeof EMPLOYEE_DESIGNATION !== 'undefined' && EMPLOYEE_DESIGNATION[employeeId] ? EMPLOYEE_DESIGNATION[employeeId] : null,
+                    shiftsAllowed: typeof EMPLOYEE_SHIFTS_ALLOWED !== 'undefined' && EMPLOYEE_SHIFTS_ALLOWED[employeeId] ? EMPLOYEE_SHIFTS_ALLOWED[employeeId] : [],
+                    shift: shift,
+                    shiftIn: shiftIn,
+                    shiftOut: shiftOut,
+                    punchIn: inTime,
+                    punchOut: outTime,
+                    dutyIn: formattedDutyIn,
+                    dutyOut: formattedDutyOut,
+                    addLunch: addLunch,
+                    dutyHours: calc.dutyHours,
+                    otHours: calc.otHours,
+                    totalHours: calc.netHours
                 };
             });
 
         // Append to master list
-        // Update SL NO based on master list length as we append
-        const updatedProcessedRows = processedRows.map((r, i) => ({ ...r, 'SL.NO.': allProcessedData.length + i + 1 }));
-        allProcessedData = allProcessedData.concat(updatedProcessedRows);
+        employeeData = employeeData.concat(processedRows);
 
         statusItem.classList.add('success');
         statusItem.querySelector('.status-text').textContent = 'Success';
@@ -186,8 +221,11 @@ async function processFile(file) {
         statusItem.querySelector('.status-text').textContent = 'Failed';
     }
 }
+
+//PROCESSING FNS
 //----------------------------------------
 //hours calc fn
+
 function calculateHours(inTimeStr, outTimeStr, shiftStr, shiftInStr, addLunch) {
     if (!inTimeStr || !outTimeStr || String(inTimeStr).toLowerCase() === 'off' || String(outTimeStr).toLowerCase() === 'off') {
         return { dutyInMins: null, dutyOutMins: null, netHours: 0 };
@@ -221,11 +259,11 @@ function calculateHours(inTimeStr, outTimeStr, shiftStr, shiftInStr, addLunch) {
 
     // this part needs further improvement in logic based on the designation and shifts allowed. 
     //early/late in; early/late out; in/out present/na; ot applicable based on the designation 
-    
+
     if (shiftInMins !== null && inMins > shiftInMins && inMins <= shiftInMins + 15)
         dutyInMins = shiftInMins;
-    else{
-        if ((shiftInMins-inMins>59) || (shiftInMins == null))
+    else {
+        if ((shiftInMins - inMins > 59) || (shiftInMins == null))
             dutyInMins = Math.ceil(inMins / 30) * 30;
         else
             dutyInMins = shiftInMins;
@@ -273,7 +311,7 @@ function reprocessData() {
         const outTime = row['Out-Time'];
         const shift = row['Shift'];
         const shiftIn = row['Shift-In'];
-        
+
         if (inTime !== 'N/A' && outTime !== 'N/A') {
             const calc = calculateHours(inTime, outTime, shift, shiftIn, addLunch);
             row['Duty-Hours'] = calc.dutyHours;
@@ -293,6 +331,7 @@ function assignShift(employeeId, currentShift) {
 }
 
 //----------------------------------------
+//NORMALISATION FNS
 // Converts standard "hh:mm AM/PM" format to minutes since midnight
 function parseTimeFormatToMinutes(timeStr) {
     const timeMatch = String(timeStr).trim().match(/^(\d{1,2})[.:]?(\d{2})?\s*([aApP][mM])?$/);
@@ -334,6 +373,7 @@ function normalizeDate(dateStr) {
 }
 
 //----------------------------------------
+//OP FNS
 // Render table function
 function renderTable() {
     if (allProcessedData.length === 0) return;
@@ -410,30 +450,30 @@ function renderTable() {
 function renderAggregatedTable(data, columns) {
     const thead = document.querySelector('#dataTable thead');
     const tbody = document.getElementById('tableBody');
-    
+
     // Build header
     let headerHTML = '<tr>';
     columns.forEach(col => {
-        if(col === 'Total Hours' || col === 'Total Shifts') {
-             headerHTML += `<th class="highlight-header">${col}</th>`;
+        if (col === 'Total Hours' || col === 'Total Shifts') {
+            headerHTML += `<th class="highlight-header">${col}</th>`;
         } else {
-             headerHTML += `<th>${col}</th>`;
+            headerHTML += `<th>${col}</th>`;
         }
     });
     headerHTML += '</tr>';
     thead.innerHTML = headerHTML;
-    
+
     // Build body
     tbody.innerHTML = '';
     data.forEach(row => {
         const tr = document.createElement('tr');
         let rowHTML = '';
         columns.forEach(col => {
-             if(col === 'Total Hours' || col === 'Total Shifts') {
-                 rowHTML += `<td class="highlight-hours">${row[col]}</td>`;
-             } else {
-                 rowHTML += `<td>${row[col]}</td>`;
-             }
+            if (col === 'Total Hours' || col === 'Total Shifts') {
+                rowHTML += `<td class="highlight-hours">${row[col]}</td>`;
+            } else {
+                rowHTML += `<td>${row[col]}</td>`;
+            }
         });
         tr.innerHTML = rowHTML;
         tbody.appendChild(tr);
@@ -442,16 +482,16 @@ function renderAggregatedTable(data, columns) {
 
 function getEmployeeAggregatedData() {
     if (allProcessedData.length === 0) return [];
-    
+
     const aggregated = {};
     allProcessedData.forEach(row => {
         let empId = row['Safety Pass No'];
         const name = row['Employee Name'];
         // Ignore rows without employee ID
-        if (!empId) return; 
-        
+        if (!empId) return;
+
         empId = String(empId).trim();
-        
+
         const key = `${empId}|${name}`;
         if (!aggregated[key]) {
             aggregated[key] = {
@@ -462,7 +502,7 @@ function getEmployeeAggregatedData() {
         }
         aggregated[key]['Total Hours'] += (parseFloat(row['NET-HOURS']) || 0);
     });
-    
+
     return Object.values(aggregated).map((item, index) => ({
         'SL.NO.': index + 1,
         'Safety Pass No': item['Safety Pass No'],
@@ -474,26 +514,26 @@ function getEmployeeAggregatedData() {
 
 function getSkillAggregatedData() {
     if (allProcessedData.length === 0) return [];
-    
+
     const aggregated = {
         'High': 0,
         'Medium': 0,
         'Low': 0,
         'Unknown': 0
     };
-    
+
     allProcessedData.forEach(row => {
         let empId = row['Safety Pass No'];
         if (!empId) return;
         empId = String(empId).trim();
-        
+
         const skill = typeof EMPLOYEE_SKILLS !== 'undefined' && EMPLOYEE_SKILLS[empId] ? EMPLOYEE_SKILLS[empId] : 'Unknown';
         if (aggregated[skill] === undefined) {
-             aggregated[skill] = 0;
+            aggregated[skill] = 0;
         }
         aggregated[skill] += (parseFloat(row['NET-HOURS']) || 0);
     });
-    
+
     return Object.keys(aggregated)
         .filter(k => aggregated[k] > 0 || k !== 'Unknown')
         .map((skill, index) => ({
@@ -504,15 +544,15 @@ function getSkillAggregatedData() {
         }));
 }
 
-function employeewiseTotalHours(){
+function employeewiseTotalHours() {
     const resultData = getEmployeeAggregatedData();
-    if(resultData.length === 0) return;
+    if (resultData.length === 0) return;
     renderAggregatedTable(resultData, ['SL.NO.', 'Safety Pass No', 'Employee Name', 'Total Hours', 'Total Shifts']);
 }
 
-function skillwiseTotalHours(){
+function skillwiseTotalHours() {
     const resultData = getSkillAggregatedData();
-    if(resultData.length === 0) return;
+    if (resultData.length === 0) return;
     renderAggregatedTable(resultData, ['SL.NO.', 'Skill Level', 'Total Hours', 'Total Shifts']);
 }
 
@@ -526,13 +566,13 @@ function exportToExcel() {
     XLSX.utils.book_append_sheet(workbook, ws1, "AttendanceData");
 
     const empData = getEmployeeAggregatedData();
-    if(empData.length > 0) {
+    if (empData.length > 0) {
         const ws2 = XLSX.utils.json_to_sheet(empData);
         XLSX.utils.book_append_sheet(workbook, ws2, "EmployeeHours");
     }
 
     const skillData = getSkillAggregatedData();
-    if(skillData.length > 0) {
+    if (skillData.length > 0) {
         const ws3 = XLSX.utils.json_to_sheet(skillData);
         XLSX.utils.book_append_sheet(workbook, ws3, "SkillHours");
     }
