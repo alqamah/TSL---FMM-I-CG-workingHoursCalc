@@ -51,32 +51,37 @@ let employeeData = [
 //IP FNS
 //file upload
 async function handleFileSelect(event) {
-    const files = Array.from(event.target.files);
-    if (!files.length) return;
+    try {
+        const files = Array.from(event.target.files);
+        if (!files.length) return;
 
-    statusSection.style.display = 'block';
+        statusSection.style.display = 'block';
 
-    // Clear previous list if running again? Or append? Let's clear for new batch.
-    fileStatusList.innerHTML = '';
-    employeeData = [];
-    tableBody.innerHTML = ''; // clear table
+        // Clear previous list if running again? Or append? Let's clear for new batch.
+        fileStatusList.innerHTML = '';
+        employeeData = [];
+        tableBody.innerHTML = ''; // clear table
 
-    fileCountBadge.textContent = `${files.length} File${files.length > 1 ? 's' : ''}`;
+        fileCountBadge.textContent = `${files.length} File${files.length > 1 ? 's' : ''}`;
 
-    for (const file of files) {
-        await processFile(file);
-    }
+        for (const file of files) {
+            await processFile(file);
+        }
 
-    // Render the processed data
-    renderTable();
+        // Render the processed data
+        renderTable();
 
-    if (employeeData.length > 0) {
-        exportBtn.disabled = false;
+        if (employeeData.length > 0) {
+            exportBtn.disabled = false;
 
-        const btnEmployeeTotal = document.getElementById('btnEmployeeTotal');
-        const btnSkillTotal = document.getElementById('btnSkillTotal');
-        if (btnEmployeeTotal) btnEmployeeTotal.style.display = 'block';
-        if (btnSkillTotal) btnSkillTotal.style.display = 'block';
+            const btnEmployeeTotal = document.getElementById('btnEmployeeTotal');
+            const btnSkillTotal = document.getElementById('btnSkillTotal');
+            if (btnEmployeeTotal) btnEmployeeTotal.style.display = 'block';
+            if (btnSkillTotal) btnSkillTotal.style.display = 'block';
+        }
+
+    } catch (err) {
+        console.error('handleFileSelect error:', err);
     }
 }
 
@@ -132,9 +137,9 @@ async function processFile(file) {
         let headerRowIndex = -1;
         for (let i = 0; i < rawJsonArray.length; i++) {
             const row = rawJsonArray[i];
-            const rowStr = row.join('').toLowerCase();
+            const rowStr = row.join('').toLowerCase().replace(/\s+/g, '').replace(/-/g, '');
             // Look for columns we know exist
-            if (rowStr.includes('safetypassno') || rowStr.includes('employeename') || rowStr.includes('in time')) {
+            if (rowStr.includes('safetypassno') || rowStr.includes('employeename') || rowStr.includes('intime')) {
                 headerRowIndex = i;
                 break;
             }
@@ -154,11 +159,7 @@ async function processFile(file) {
                 let empId = row['Safety Pass No'] ? String(row['Safety Pass No']).trim() : '';
                 if (!empName || !empId) return false;
                 
-                if (typeof employee_details !== 'undefined') {
-                    return employee_details.some(emp => emp.sp_no === empId);
-                }
-                
-                return typeof EMPLOYEE_SKILLS !== 'undefined' && EMPLOYEE_SKILLS[empId];
+                return true;
             })
             .map((row, index) => {
                 const inTimeRaw = String(row['In Time'] || row['In-Time'] || '').trim();
@@ -189,21 +190,17 @@ async function processFile(file) {
                 const formattedDutyIn = calc.dutyInMins !== null ? formatMinutesTo24h(calc.dutyInMins) : '';
                 const formattedDutyOut = calc.dutyOutMins !== null ? formatMinutesTo24h(calc.dutyOutMins) : '';
 
-                let skillVal = 'Unknown';
-                let designationVal = '';
-                let shiftsAllowedVal = [];
+                let skillVal = null;
+                let designationVal = null;
+                let shiftsAllowedVal = null;
                 
                 if (typeof employee_details !== 'undefined') {
                     const empDetails = employee_details.find(e => e.sp_no === employeeId);
                     if (empDetails) {
-                        skillVal = empDetails.skill;
-                        designationVal = empDetails.designation;
-                        shiftsAllowedVal = empDetails.allowedShifts || [];
+                        skillVal = empDetails.skill || null;
+                        designationVal = empDetails.designation || null;
+                        shiftsAllowedVal = empDetails.allowedShifts || null;
                     }
-                } else {
-                    skillVal = typeof EMPLOYEE_SKILLS !== 'undefined' && EMPLOYEE_SKILLS[employeeId] ? EMPLOYEE_SKILLS[employeeId] : 'Unknown';
-                    designationVal = typeof EMPLOYEE_DESIGNATION !== 'undefined' && EMPLOYEE_DESIGNATION[employeeId] ? EMPLOYEE_DESIGNATION[employeeId] : '';
-                    shiftsAllowedVal = typeof EMPLOYEE_SHIFTS_ALLOWED !== 'undefined' && EMPLOYEE_SHIFTS_ALLOWED[employeeId] ? EMPLOYEE_SHIFTS_ALLOWED[employeeId] : [];
                 }
 
                 return {
@@ -238,7 +235,7 @@ async function processFile(file) {
         statusItem.querySelector('.status-text').textContent = 'Success';
 
     } catch (err) {
-        console.error(err);
+        console.error('processFile error:', err);
         statusItem.classList.add('error');
         statusItem.querySelector('.status-text').textContent = 'Failed';
     }
@@ -249,370 +246,438 @@ async function processFile(file) {
 //hours calc fn
 
 function calculateHours(inTimeStr, outTimeStr, shiftStr, shiftInStr, addLunch) {
-    if (!inTimeStr || !outTimeStr || String(inTimeStr).toLowerCase() === 'off' || String(outTimeStr).toLowerCase() === 'off') {
-        return { dutyInMins: null, dutyOutMins: null, netHours: 0 };
-    }
+    try {
+        if (!inTimeStr || !outTimeStr || String(inTimeStr).toLowerCase() === 'off' || String(outTimeStr).toLowerCase() === 'off') {
+            return { dutyInMins: null, dutyOutMins: null, netHours: 0 };
+        }
 
-    // Attempt to parse manually (hh:mm AM/PM)
-    const inMins = parseTimeFormatToMinutes(inTimeStr);
-    const outMins = parseTimeFormatToMinutes(outTimeStr);
-    const shiftInMins = shiftInStr ? parseTimeFormatToMinutes(shiftInStr) : null;
+        // Attempt to parse manually (hh:mm AM/PM)
+        const inMins = parseTimeFormatToMinutes(inTimeStr);
+        const outMins = parseTimeFormatToMinutes(outTimeStr);
+        const shiftInMins = shiftInStr ? parseTimeFormatToMinutes(shiftInStr) : null;
 
-    if (inMins === null || outMins === null) {
-        return { dutyInMins: null, dutyOutMins: null, netHours: 0 };
-    }
+        if (inMins === null || outMins === null) {
+            return { dutyInMins: null, dutyOutMins: null, netHours: 0 };
+        }
 
-    let dutyInMins = inMins;
-    let dutyOutMins = outMins;
+        let dutyInMins = inMins;
+        let dutyOutMins = outMins;
 
-    // if (shiftStr === 'C') {
-    //     dutyInMins = Math.ceil(inMins / 30) * 30;
-    //     dutyOutMins = Math.floor(outMins / 30) * 30;
-    // } else if (shiftInMins !== null) {
-    //     if (inMins <= shiftInMins + 15) {
-    //         dutyInMins = shiftInMins;
-    //     } else {
-    //         dutyInMins = Math.ceil(inMins / 30) * 30;
-    //     }
+        // if (shiftStr === 'C') {
+        //     dutyInMins = Math.ceil(inMins / 30) * 30;
+        //     dutyOutMins = Math.floor(outMins / 30) * 30;
+        // } else if (shiftInMins !== null) {
+        //     if (inMins <= shiftInMins + 15) {
+        //         dutyInMins = shiftInMins;
+        //     } else {
+        //         dutyInMins = Math.ceil(inMins / 30) * 30;
+        //     }
 
-    //     dutyOutMins = Math.floor(outMins / 30) * 30;
-    // }
+        //     dutyOutMins = Math.floor(outMins / 30) * 30;
+        // }
 
 
-    // this part needs further improvement in logic based on the designation and shifts allowed. 
-    //early/late in; early/late out; in/out present/na; ot applicable based on the designation 
+        // this part needs further improvement in logic based on the designation and shifts allowed. 
+        //early/late in; early/late out; in/out present/na; ot applicable based on the designation 
 
-    if (shiftInMins !== null && inMins > shiftInMins && inMins <= shiftInMins + 15)
-        dutyInMins = shiftInMins;
-    else {
-        if ((shiftInMins - inMins > 59) || (shiftInMins == null))
-            dutyInMins = Math.ceil(inMins / 30) * 30;
-        else
+        if (shiftInMins !== null && inMins > shiftInMins && inMins <= shiftInMins + 15)
             dutyInMins = shiftInMins;
+        else {
+            if ((shiftInMins - inMins > 59) || (shiftInMins == null))
+                dutyInMins = Math.ceil(inMins / 30) * 30;
+            else
+                dutyInMins = shiftInMins;
+        }
+        dutyOutMins = Math.floor(outMins / 30) * 30;
+
+        // If outTime is smaller, it crossed midnight (next day)
+        let diffMins = dutyOutMins - dutyInMins;
+        if (outMins < inMins) {
+            diffMins += 24 * 60;
+        } else if (diffMins < 0) {
+            diffMins = 0;
+        }
+
+        let totalHours = diffMins / 60;
+
+        if (!addLunch && (shiftStr === 'G' || shiftStr === 'W1')) {
+            totalHours = Math.max(0, totalHours - 1);
+        }
+
+        // Lunch hour is not to be calculated by the app's end, so netHours = totalHours
+        let netHours = totalHours;
+        let otHours = totalHours > 8 ? totalHours - 8 : 0;
+        let dutyHours = totalHours - otHours;
+
+        if (diffMins < 30) {
+            netHours = 0;
+            otHours = 0;
+            dutyHours = 0;
+        }
+
+        return {
+            dutyInMins,
+            dutyOutMins,
+            netHours: parseFloat(netHours.toFixed(2)),
+            otHours: parseFloat(otHours.toFixed(2)),
+            dutyHours: parseFloat(dutyHours.toFixed(2))
+        };
+    } catch (err) {
+        console.error('calculateHours error:', err);
+        return { dutyInMins: null, dutyOutMins: null, netHours: 0, otHours: 0, dutyHours: 0 };
     }
-    dutyOutMins = Math.floor(outMins / 30) * 30;
-
-    // If outTime is smaller, it crossed midnight (next day)
-    let diffMins = dutyOutMins - dutyInMins;
-    if (outMins < inMins) {
-        diffMins += 24 * 60;
-    } else if (diffMins < 0) {
-        diffMins = 0;
-    }
-
-    let totalHours = diffMins / 60;
-
-    if (!addLunch && (shiftStr === 'G' || shiftStr === 'W1')) {
-        totalHours = Math.max(0, totalHours - 1);
-    }
-
-    // Lunch hour is not to be calculated by the app's end, so netHours = totalHours
-    let netHours = totalHours;
-    let otHours = totalHours > 8 ? totalHours - 8 : 0;
-    let dutyHours = totalHours - otHours;
-
-    if (diffMins < 30) {
-        netHours = 0;
-        otHours = 0;
-        dutyHours = 0;
-    }
-
-    return {
-        dutyInMins,
-        dutyOutMins,
-        netHours: parseFloat(netHours.toFixed(2)),
-        otHours: parseFloat(otHours.toFixed(2)),
-        dutyHours: parseFloat(dutyHours.toFixed(2))
-    };
 }
 
 function reprocessData() {
-    const addLunch = addLunchCheckbox ? addLunchCheckbox.checked : false;
-    employeeData.forEach(row => {
-        const inTime = row.punchIn;
-        const outTime = row.punchOut;
-        const shift = row.shift;
-        const shiftIn = row.shiftIn;
+    try {
+        const addLunch = addLunchCheckbox ? addLunchCheckbox.checked : false;
+        employeeData.forEach(row => {
+            const inTime = row.punchIn;
+            const outTime = row.punchOut;
+            const shift = row.shift;
+            const shiftIn = row.shiftIn;
 
-        if (inTime !== 'N/A' && outTime !== 'N/A') {
-            const calc = calculateHours(inTime, outTime, shift, shiftIn, addLunch);
-            row.dutyHours = calc.dutyHours;
-            row.otHours = calc.otHours;
-            row.totalHours = calc.netHours;
-        }
-    });
-    renderTable();
+            if (inTime !== 'N/A' && outTime !== 'N/A') {
+                const calc = calculateHours(inTime, outTime, shift, shiftIn, addLunch);
+                row.dutyHours = calc.dutyHours;
+                row.otHours = calc.otHours;
+                row.totalHours = calc.netHours;
+            }
+        });
+        renderTable();
+    } catch (err) {
+        console.error('reprocessData error:', err);
+    }
 }
 
-// assigns shift - for assigning custom shift to Drivers
+// assigns shift - uses employee_details[].designation to identify drivers
 function assignShift(employeeId, currentShift) {
-    if (!DRIVERS.includes(employeeId) && currentShift === 'G') {
-        return 'W1';
+    try {
+        let isDriver = false;
+        if (typeof employee_details !== 'undefined') {
+            const emp = employee_details.find(e => e.sp_no === employeeId);
+            isDriver = emp && emp.designation === 'driver';
+        }
+
+        if (!isDriver && currentShift === 'G') {
+            return 'W1';
+        }
+        return currentShift;
+    } catch (err) {
+        console.error('assignShift error:', err);
+        return currentShift;
     }
-    return currentShift;
 }
 
 //----------------------------------------
 //NORMALISATION FNS
 // Converts standard "hh:mm AM/PM" format to minutes since midnight
 function parseTimeFormatToMinutes(timeStr) {
-    const timeMatch = String(timeStr).trim().match(/^(\d{1,2})[.:]?(\d{2})?\s*([aApP][mM])?$/);
-    if (!timeMatch) return null;
+    try {
+        const timeMatch = String(timeStr).trim().match(/^(\d{1,2})[.:]?(\d{2})?\s*([aApP][mM])?$/);
+        if (!timeMatch) return null;
 
-    let hours = parseInt(timeMatch[1], 10);
-    const mins = parseInt(timeMatch[2] || '0', 10);
-    const period = timeMatch[3] ? timeMatch[3].toUpperCase() : null;
+        let hours = parseInt(timeMatch[1], 10);
+        const mins = parseInt(timeMatch[2] || '0', 10);
+        const period = timeMatch[3] ? timeMatch[3].toUpperCase() : null;
 
-    if (period === 'PM' && hours < 12) hours += 12;
-    if (period === 'AM' && hours === 12) hours = 0;
+        if (period === 'PM' && hours < 12) hours += 12;
+        if (period === 'AM' && hours === 12) hours = 0;
 
-    return hours * 60 + mins;
+        return hours * 60 + mins;
+    } catch (err) {
+        console.error('parseTimeFormatToMinutes error:', err);
+        return null;
+    }
 }
 
 // Formats minutes since midnight to "HH:mm" (24h format)
 function formatMinutesTo24h(totalMinutes) {
-    const hours = Math.floor(totalMinutes / 60);
-    const mins = totalMinutes % 60;
-    return `${String(hours).padStart(2, '0')}:${String(mins).padStart(2, '0')}`;
+    try {
+        const hours = Math.floor(totalMinutes / 60);
+        const mins = totalMinutes % 60;
+        return `${String(hours).padStart(2, '0')}:${String(mins).padStart(2, '0')}`;
+    } catch (err) {
+        console.error('formatMinutesTo24h error:', err);
+        return '';
+    }
 }
 
 // Date normalization function 
 function normalizeDate(dateStr) {
-    if (!dateStr) return 'N/A';
+    try {
+        if (!dateStr) return 'N/A';
 
-    // Just a basic cleanup for now, it's already extracted.
-    // Replace slashes with dashes, trim spaces.
-    let clean = dateStr.replace(/\//g, '-').trim();
+        // Just a basic cleanup for now, it's already extracted.
+        // Replace slashes with dashes, trim spaces.
+        let clean = dateStr.replace(/\//g, '-').trim();
 
-    // Remove extra trailing words from extraction edge cases?
-    // the regex .match(/Date\s*:\s*(.*)/) could capture garbage.
-    const strictMatch = clean.match(/(\d{1,2}[-\s/]\d{1,2}[-\s/]\d{2,4})/);
-    if (strictMatch) {
-        clean = strictMatch[1].replace(/\s+/g, '-'); // replace spaces with dashes
+        // Remove extra trailing words from extraction edge cases?
+        // the regex .match(/Date\s*:\s*(.*)/) could capture garbage.
+        const strictMatch = clean.match(/(\d{1,2}[-\s/]\d{1,2}[-\s/]\d{2,4})/);
+        if (strictMatch) {
+            clean = strictMatch[1].replace(/\s+/g, '-'); // replace spaces with dashes
+        }
+
+        return clean;
+    } catch (err) {
+        console.error('normalizeDate error:', err);
+        return 'N/A';
     }
-
-    return clean;
 }
 
 //----------------------------------------
 //OP FNS
 // Render table function
 function renderTable() {
-    if (employeeData.length === 0) return;
+    try {
+        if (employeeData.length === 0) return;
 
-    const thead = document.querySelector('#dataTable thead');
-    if (thead) {
-        thead.innerHTML = `
-            <tr>
-                <th>SL.NO.</th>
-                <th>DATE</th>
-                <th>SP NO</th>
-                <th>NAME</th>
-                <th>VENDOR NAME</th>
-                <th>WORKORDER NO</th>
-                <th>DEPT NAME</th>
-                <th>SECTION</th>
-                <th>SKILL</th>
-                <th>DESIGNATION</th>
-                <th>SHIFTS ALLOWED</th>
-                <th>SHIFT</th>
-                <th>SHIFT IN</th>
-                <th>SHIFT OUT</th>
-                <th>PUNCH IN</th>
-                <th>PUNCH OUT</th>
-                <th>DUTY IN</th>
-                <th>DUTY OUT</th>
-                <th>ADD LUNCH</th>
-                <th>DUTY HRS</th>
-                <th>OT HRS</th>
-                <th class="highlight-header">TOTAL HRS</th>
-            </tr>
-        `;
+        const thead = document.querySelector('#dataTable thead');
+        if (thead) {
+            thead.innerHTML = `
+                <tr>
+                    <th>SL.NO.</th>
+                    <th>DATE</th>
+                    <th>SP NO</th>
+                    <th>NAME</th>
+                    <th>VENDOR NAME</th>
+                    <th>WORKORDER NO</th>
+                    <th>DEPT NAME</th>
+                    <th>SECTION</th>
+                    <th>SKILL</th>
+                    <th>DESIGNATION</th>
+                    <th>SHIFTS ALLOWED</th>
+                    <th>SHIFT</th>
+                    <th>SHIFT IN</th>
+                    <th>SHIFT OUT</th>
+                    <th>PUNCH IN</th>
+                    <th>PUNCH OUT</th>
+                    <th>DUTY IN</th>
+                    <th>DUTY OUT</th>
+                    <th>ADD LUNCH</th>
+                    <th>DUTY HRS</th>
+                    <th>OT HRS</th>
+                    <th class="highlight-header">TOTAL HRS</th>
+                </tr>
+            `;
+        }
+
+        tableBody.innerHTML = ''; // clear empty state
+
+        const query = searchInput ? searchInput.value.toLowerCase().trim() : '';
+
+        const filteredData = employeeData.filter(row => {
+            if (!query) return true;
+            const searchStr = `${row.sp_no} ${row.name} ${row.vendor_name} ${row.shift}`.toLowerCase();
+            return searchStr.includes(query);
+        });
+
+        if (filteredData.length === 0) {
+            tableBody.innerHTML = `
+                <tr class="empty-state-row">
+                    <td colspan="22">
+                        <div class="empty-state">
+                            <p>NO MATCHING RECORDS FOUND</p>
+                        </div>
+                    </td>
+                </tr>
+            `;
+            return;
+        }
+
+        // Render filtered rows
+        filteredData.forEach((row, index) => {
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+                <td>${index + 1}</td>
+                <td>${row.date || ''}</td>
+                <td>${row.sp_no || ''}</td>
+                <td>${row.name || ''}</td>
+                <td>${row.vendor_name || ''}</td>
+                <td>${row.workorder_no || ''}</td>
+                <td>${row.dept_name || ''}</td>
+                <td>${row.section || ''}</td>
+                <td>${row.skill || ''}</td>
+                <td>${row.designation || ''}</td>
+                <td>${(row.shiftsAllowed || []).join(', ') || ''}</td>
+                <td>${row.shift || ''}</td>
+                <td>${row.shiftIn || ''}</td>
+                <td>${row.shiftOut || ''}</td>
+                <td>${row.punchIn || ''}</td>
+                <td>${row.punchOut || ''}</td>
+                <td>${row.dutyIn || ''}</td>
+                <td>${row.dutyOut || ''}</td>
+                <td>${row.addLunch ? 'Yes' : 'No'}</td>
+                <td>${row.dutyHours ?? ''}</td>
+                <td>${row.otHours ?? ''}</td>
+                <td class="highlight-hours">${row.totalHours ?? ''}</td>
+            `;
+            tableBody.appendChild(tr);
+        });
+    } catch (err) {
+        console.error('renderTable error:', err);
     }
-
-    tableBody.innerHTML = ''; // clear empty state
-
-    const query = searchInput ? searchInput.value.toLowerCase().trim() : '';
-
-    const filteredData = employeeData.filter(row => {
-        if (!query) return true;
-        const searchStr = `${row.sp_no} ${row.name} ${row.vendor_name} ${row.shift}`.toLowerCase();
-        return searchStr.includes(query);
-    });
-
-    if (filteredData.length === 0) {
-        tableBody.innerHTML = `
-            <tr class="empty-state-row">
-                <td colspan="22">
-                    <div class="empty-state">
-                        <p>NO MATCHING RECORDS FOUND</p>
-                    </div>
-                </td>
-            </tr>
-        `;
-        return;
-    }
-
-    // Render filtered rows
-    filteredData.forEach((row, index) => {
-        const tr = document.createElement('tr');
-        tr.innerHTML = `
-            <td>${index + 1}</td>
-            <td>${row.date || ''}</td>
-            <td>${row.sp_no || ''}</td>
-            <td>${row.name || ''}</td>
-            <td>${row.vendor_name || ''}</td>
-            <td>${row.workorder_no || ''}</td>
-            <td>${row.dept_name || ''}</td>
-            <td>${row.section || ''}</td>
-            <td>${row.skill || ''}</td>
-            <td>${row.designation || ''}</td>
-            <td>${(row.shiftsAllowed || []).join(', ') || ''}</td>
-            <td>${row.shift || ''}</td>
-            <td>${row.shiftIn || ''}</td>
-            <td>${row.shiftOut || ''}</td>
-            <td>${row.punchIn || ''}</td>
-            <td>${row.punchOut || ''}</td>
-            <td>${row.dutyIn || ''}</td>
-            <td>${row.dutyOut || ''}</td>
-            <td>${row.addLunch ? 'Yes' : 'No'}</td>
-            <td>${row.dutyHours ?? ''}</td>
-            <td>${row.otHours ?? ''}</td>
-            <td class="highlight-hours">${row.totalHours ?? ''}</td>
-        `;
-        tableBody.appendChild(tr);
-    });
 }
 
 function renderAggregatedTable(data, columns) {
-    const thead = document.querySelector('#dataTable thead');
-    const tbody = document.getElementById('tableBody');
+    try {
+        const thead = document.querySelector('#dataTable thead');
+        const tbody = document.getElementById('tableBody');
 
-    // Build header
-    let headerHTML = '<tr>';
-    columns.forEach(col => {
-        if (col === 'Total Hours' || col === 'Total Shifts') {
-            headerHTML += `<th class="highlight-header">${col}</th>`;
-        } else {
-            headerHTML += `<th>${col}</th>`;
-        }
-    });
-    headerHTML += '</tr>';
-    thead.innerHTML = headerHTML;
-
-    // Build body
-    tbody.innerHTML = '';
-    data.forEach(row => {
-        const tr = document.createElement('tr');
-        let rowHTML = '';
+        // Build header
+        let headerHTML = '<tr>';
         columns.forEach(col => {
             if (col === 'Total Hours' || col === 'Total Shifts') {
-                rowHTML += `<td class="highlight-hours">${row[col]}</td>`;
+                headerHTML += `<th class="highlight-header">${col}</th>`;
             } else {
-                rowHTML += `<td>${row[col]}</td>`;
+                headerHTML += `<th>${col}</th>`;
             }
         });
-        tr.innerHTML = rowHTML;
-        tbody.appendChild(tr);
-    });
+        headerHTML += '</tr>';
+        thead.innerHTML = headerHTML;
+
+        // Build body
+        tbody.innerHTML = '';
+        data.forEach(row => {
+            const tr = document.createElement('tr');
+            let rowHTML = '';
+            columns.forEach(col => {
+                if (col === 'Total Hours' || col === 'Total Shifts') {
+                    rowHTML += `<td class="highlight-hours">${row[col]}</td>`;
+                } else {
+                    rowHTML += `<td>${row[col]}</td>`;
+                }
+            });
+            tr.innerHTML = rowHTML;
+            tbody.appendChild(tr);
+        });
+    } catch (err) {
+        console.error('renderAggregatedTable error:', err);
+    }
 }
 
 function getEmployeeAggregatedData() {
-    if (employeeData.length === 0) return [];
+    try {
+        if (employeeData.length === 0) return [];
 
-    const aggregated = {};
-    employeeData.forEach(row => {
-        let empId = row.sp_no;
-        const name = row.name;
-        // Ignore rows without employee ID
-        if (!empId) return;
+        const aggregated = {};
+        employeeData.forEach(row => {
+            let empId = row.sp_no;
+            const name = row.name;
+            // Ignore rows without employee ID
+            if (!empId) return;
 
-        empId = String(empId).trim();
+            empId = String(empId).trim();
 
-        const key = `${empId}|${name}`;
-        if (!aggregated[key]) {
-            aggregated[key] = {
-                'Safety Pass No': empId,
-                'Employee Name': name,
-                'Total Hours': 0
-            };
-        }
-        aggregated[key]['Total Hours'] += (parseFloat(row.totalHours) || 0);
-    });
+            const key = `${empId}|${name}`;
+            if (!aggregated[key]) {
+                aggregated[key] = {
+                    'Safety Pass No': empId,
+                    'Employee Name': name,
+                    'Total Hours': 0
+                };
+            }
+            aggregated[key]['Total Hours'] += (parseFloat(row.totalHours) || 0);
+        });
 
-    return Object.values(aggregated).map((item, index) => ({
-        'SL.NO.': index + 1,
-        'Safety Pass No': item['Safety Pass No'],
-        'Employee Name': item['Employee Name'],
-        'Total Hours': parseFloat(item['Total Hours'].toFixed(2)),
-        'Total Shifts': parseFloat((item['Total Hours'] / 8).toFixed(2))
-    }));
+        return Object.values(aggregated).map((item, index) => ({
+            'SL.NO.': index + 1,
+            'Safety Pass No': item['Safety Pass No'],
+            'Employee Name': item['Employee Name'],
+            'Total Hours': parseFloat(item['Total Hours'].toFixed(2)),
+            'Total Shifts': parseFloat((item['Total Hours'] / 8).toFixed(2))
+        }));
+    } catch (err) {
+        console.error('getEmployeeAggregatedData error:', err);
+        return [];
+    }
 }
 
+//--------------------------------
+// AGGREGATE FNS
+
 function getSkillAggregatedData() {
-    if (employeeData.length === 0) return [];
+    try {
+        if (employeeData.length === 0) return [];
 
-    const aggregated = {
-        'High': 0,
-        'Medium': 0,
-        'Low': 0,
-        'Unknown': 0
-    };
+        const aggregated = {
+            'High': 0,
+            'Medium': 0,
+            'Low': 0,
+            'Unknown': 0
+        };
 
-    employeeData.forEach(row => {
-        let empId = row.sp_no;
-        if (!empId) return;
-        empId = String(empId).trim();
+        employeeData.forEach(row => {
+            let empId = row.sp_no;
+            if (!empId) return;
+            empId = String(empId).trim();
 
-        const skill = row.skill || 'Unknown';
-        if (aggregated[skill] === undefined) {
-            aggregated[skill] = 0;
-        }
-        aggregated[skill] += (parseFloat(row.totalHours) || 0);
-    });
+            const skill = row.skill || 'Unknown';
+            if (aggregated[skill] === undefined) {
+                aggregated[skill] = 0;
+            }
+            aggregated[skill] += (parseFloat(row.totalHours) || 0);
+        });
 
-    return Object.keys(aggregated)
-        .filter(k => aggregated[k] > 0 || k !== 'Unknown')
-        .map((skill, index) => ({
-            'SL.NO.': index + 1,
-            'Skill Level': skill,
-            'Total Hours': parseFloat(aggregated[skill].toFixed(2)),
-            'Total Shifts': parseFloat((aggregated[skill] / 8).toFixed(2))
-        }));
+        return Object.keys(aggregated)
+            .filter(k => aggregated[k] > 0 || k !== 'Unknown')
+            .map((skill, index) => ({
+                'SL.NO.': index + 1,
+                'Skill Level': skill,
+                'Total Hours': parseFloat(aggregated[skill].toFixed(2)),
+                'Total Shifts': parseFloat((aggregated[skill] / 8).toFixed(2))
+            }));
+    } catch (err) {
+        console.error('getSkillAggregatedData error:', err);
+        return [];
+    }
 }
 
 function employeewiseTotalHours() {
-    const resultData = getEmployeeAggregatedData();
-    if (resultData.length === 0) return;
-    renderAggregatedTable(resultData, ['SL.NO.', 'Safety Pass No', 'Employee Name', 'Total Hours', 'Total Shifts']);
+    try {
+        const resultData = getEmployeeAggregatedData();
+        if (resultData.length === 0) return;
+        renderAggregatedTable(resultData, ['SL.NO.', 'Safety Pass No', 'Employee Name', 'Total Hours', 'Total Shifts']);
+    } catch (err) {
+        console.error('employeewiseTotalHours error:', err);
+    }
 }
 
 function skillwiseTotalHours() {
-    const resultData = getSkillAggregatedData();
-    if (resultData.length === 0) return;
-    renderAggregatedTable(resultData, ['SL.NO.', 'Skill Level', 'Total Hours', 'Total Shifts']);
+    try {
+        const resultData = getSkillAggregatedData();
+        if (resultData.length === 0) return;
+        renderAggregatedTable(resultData, ['SL.NO.', 'Skill Level', 'Total Hours', 'Total Shifts']);
+    } catch (err) {
+        console.error('skillwiseTotalHours error:', err);
+    }
 }
 
 //excel export fn
 function exportToExcel() {
-    if (employeeData.length === 0) return;
+    try {
+        if (employeeData.length === 0) return;
 
-    const workbook = XLSX.utils.book_new();
+        const workbook = XLSX.utils.book_new();
 
-    const ws1 = XLSX.utils.json_to_sheet(employeeData);
-    XLSX.utils.book_append_sheet(workbook, ws1, "AttendanceData");
+        const ws1 = XLSX.utils.json_to_sheet(employeeData);
+        XLSX.utils.book_append_sheet(workbook, ws1, "AttendanceData");
 
-    const empData = getEmployeeAggregatedData();
-    if (empData.length > 0) {
-        const ws2 = XLSX.utils.json_to_sheet(empData);
-        XLSX.utils.book_append_sheet(workbook, ws2, "EmployeeHours");
+        const empData = getEmployeeAggregatedData();
+        if (empData.length > 0) {
+            const ws2 = XLSX.utils.json_to_sheet(empData);
+            XLSX.utils.book_append_sheet(workbook, ws2, "EmployeeHours");
+        }
+
+        const skillData = getSkillAggregatedData();
+        if (skillData.length > 0) {
+            const ws3 = XLSX.utils.json_to_sheet(skillData);
+            XLSX.utils.book_append_sheet(workbook, ws3, "SkillHours");
+        }
+
+        XLSX.writeFile(workbook, "Calculated_Working_Hours.xlsx");
+    } catch (err) {
+        console.error('exportToExcel error:', err);
     }
-
-    const skillData = getSkillAggregatedData();
-    if (skillData.length > 0) {
-        const ws3 = XLSX.utils.json_to_sheet(skillData);
-        XLSX.utils.book_append_sheet(workbook, ws3, "SkillHours");
-    }
-
-    XLSX.writeFile(workbook, "Calculated_Working_Hours.xlsx");
 }
