@@ -333,12 +333,14 @@ function reprocessData() {
     try {
         const addLunch = addLunchCheckbox ? addLunchCheckbox.checked : false;
         employeeData.forEach(row => {
+            row.addLunch = addLunch; // update the stored value so the table reflects it
+
             const inTime = row.punchIn;
             const outTime = row.punchOut;
             const shift = row.shift;
             const shiftIn = row.shiftIn;
 
-            if (inTime !== 'N/A' && outTime !== 'N/A') {
+            if (inTime && outTime && inTime !== 'N/A' && outTime !== 'N/A') {
                 const calc = calculateHours(inTime, outTime, shift, shiftIn, addLunch);
                 row.dutyHours = calc.dutyHours;
                 row.otHours = calc.otHours;
