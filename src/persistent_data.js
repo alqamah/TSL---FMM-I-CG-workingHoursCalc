@@ -25,7 +25,7 @@ const DRIVERS = [
     'RW0305045827',
     'RD1203000744',
     'RW0807096365'
-]; 
+];
 
 const EMPLOYEE_SKILLS = {
     'VW0123649596': 'High',
@@ -59,4 +59,39 @@ const EMPLOYEE_SKILLS = {
     'RW1110162302': 'Medium',
     'RW1223956402': 'Medium',
     'RW0611151520': 'Medium'
-};
+};
+
+
+const employee_details = [
+    { sp_no: "VW0123649596", designation: "", skill: "high", allowedShifts: [] },
+    { sp_no: "RW1011186925", designation: "", skill: "high", allowedShifts: [] },
+    { sp_no: "RW1019191001", designation: "", skill: "high", allowedShifts: [] },
+    { sp_no: "RW0911182377", designation: "", skill: "high", allowedShifts: [] },
+    { sp_no: "VW0123657591", designation: "", skill: "high", allowedShifts: [] },
+    { sp_no: "RW0305045827", designation: "", skill: "high", allowedShifts: [] },
+    { sp_no: "RW0403000921", designation: "", skill: "high", allowedShifts: [] },
+    { sp_no: "RD0918134974", designation: "", skill: "high", allowedShifts: [] },
+    { sp_no: "RW0807096365", designation: "", skill: "high", allowedShifts: [] },
+    { sp_no: "RW0608113053", designation: "", skill: "high", allowedShifts: [] },
+    { sp_no: "RD1203000744", designation: "", skill: "high", allowedShifts: [] },
+    { sp_no: "VD0722561172", designation: "", skill: "high", allowedShifts: [] },
+    { sp_no: "RW0916154862", designation: "", skill: "high", allowedShifts: [] },
+    { sp_no: "RD0721287965", designation: "driver", skill: "high", allowedShifts: [] },
+    { sp_no: "RW0218129961", designation: "", skill: "low", allowedShifts: [] },
+    { sp_no: "RW0105038642", designation: "", skill: "low", allowedShifts: [] },
+    { sp_no: "RW0911183405", designation: "", skill: "low", allowedShifts: [] },
+    { sp_no: "RW1103005471", designation: "", skill: "low", allowedShifts: [] },
+    { sp_no: "JW0724246971", designation: "", skill: "low", allowedShifts: [] },
+    { sp_no: "RS0604000979", designation: "", skill: "low", allowedShifts: [] },
+    { sp_no: "RW0822573453", designation: "", skill: "low", allowedShifts: [] },
+    { sp_no: "RW0621276455", designation: "", skill: "low", allowedShifts: [] },
+    { sp_no: "RW0512133959", designation: "", skill: "low", allowedShifts: [] },
+    { sp_no: "RW0623791155", designation: "", skill: "low", allowedShifts: [] },
+    { sp_no: "RW0723808557", designation: "", skill: "low", allowedShifts: [] },
+    { sp_no: "RW0907097796", designation: "", skill: "medium", allowedShifts: [] },
+    { sp_no: "RW1103006020", designation: "", skill: "medium", allowedShifts: [] },
+    { sp_no: "RW0204008111", designation: "", skill: "medium", allowedShifts: [] },
+    { sp_no: "RW1110162302", designation: "", skill: "medium", allowedShifts: [] },
+    { sp_no: "RW1223956402", designation: "", skill: "medium", allowedShifts: [] },
+    { sp_no: "RW0611151520", designation: "", skill: "medium", allowedShifts: [] }
+];
