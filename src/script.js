@@ -187,7 +187,7 @@ async function processFile(file) {
                 }
 
                 const addLunch = addLunchCheckbox ? addLunchCheckbox.checked : false;
-                const calc = calculateHours(inTime, outTime, shift, shiftIn, addLunch);
+                const calc = calculateHours(inTime, outTime, shift, shiftIn, shiftOut, addLunch, employeeId);
 
                 const formattedDutyIn = calc.dutyInMins !== null ? formatMinutesTo24h(calc.dutyInMins) : '';
                 const formattedDutyOut = calc.dutyOutMins !== null ? formatMinutesTo24h(calc.dutyOutMins) : '';
@@ -245,56 +245,85 @@ async function processFile(file) {
 //----------------------------------------
 
 //DATA PROCESSING (MAIN) FUNCTIONS
-//hours calc fn
-function calculateHours(inTimeStr, outTimeStr, shiftStr, shiftInStr, addLunch) {
+//hours calc fn for duty-hours, ot-hours, net-hours by assigning duty-in and duty-out
+function calculateHours(inTimeStr, outTimeStr, shiftStr, shiftInStr, shiftOutStr, addLunch, employeeId) {
     try {
         if (!inTimeStr || !outTimeStr || String(inTimeStr).toLowerCase() === 'off' || String(outTimeStr).toLowerCase() === 'off') {
-            return { dutyInMins: null, dutyOutMins: null, netHours: 0 };
+            return { dutyInMins: null, dutyOutMins: null, netHours: 0, otHours: 0, dutyHours: 0 };
         }
 
-        // Attempt to parse manually (hh:mm AM/PM)
         const inMins = parseTimeFormatToMinutes(inTimeStr);
         const outMins = parseTimeFormatToMinutes(outTimeStr);
         const shiftInMins = shiftInStr ? parseTimeFormatToMinutes(shiftInStr) : null;
+        const shiftOutMins = shiftOutStr ? parseTimeFormatToMinutes(shiftOutStr) : null;
 
         if (inMins === null || outMins === null) {
-            return { dutyInMins: null, dutyOutMins: null, netHours: 0 };
+            return { dutyInMins: null, dutyOutMins: null, netHours: 0, otHours: 0, dutyHours: 0 };
+        }
+
+        let allowedOtIn = false;
+        let allowedOtOut = false;
+        
+        if (typeof employee_details !== 'undefined' && employeeId) {
+            const empDetails = employee_details.find(e => e.sp_no === employeeId);
+            if (empDetails && empDetails.allowedOT) {
+                allowedOtIn = empDetails.allowedOT.in;
+                allowedOtOut = empDetails.allowedOT.out;
+            }
         }
 
         let dutyInMins = inMins;
         let dutyOutMins = outMins;
 
-        // if (shiftStr === 'C') {
-        //     dutyInMins = Math.ceil(inMins / 30) * 30;
-        //     dutyOutMins = Math.floor(outMins / 30) * 30;
-        // } else if (shiftInMins !== null) {
-        //     if (inMins <= shiftInMins + 15) {
-        //         dutyInMins = shiftInMins;
-        //     } else {
-        //         dutyInMins = Math.ceil(inMins / 30) * 30;
-        //     }
+        // IN TIME LOGIC
+        if (shiftInMins !== null) {
+            let nInMins = inMins;
+            // Handle cross-day discrepancy (e.g. shift starts 22:00, punched at 01:00)
+            if (inMins < shiftInMins - 720) nInMins += 1440;
+            else if (inMins > shiftInMins + 720) nInMins -= 1440;
 
-        //     dutyOutMins = Math.floor(outMins / 30) * 30;
-        // }
-
-
-        // this part needs further improvement in logic based on the designation and shifts allowed. 
-        //early/late in; early/late out; in/out present/na; ot applicable based on the designation 
-
-        if (shiftInMins !== null && inMins > shiftInMins && inMins <= shiftInMins + 15)
-            dutyInMins = shiftInMins;
-        else {
-            if ((shiftInMins - inMins > 59) || (shiftInMins == null))
-                dutyInMins = Math.ceil(inMins / 30) * 30;
-            else
+            if (nInMins > shiftInMins + 15) {
+                // Late Check-In: Round UP to nearest 30 mins (Penalty)
+                let r = Math.ceil(nInMins / 30) * 30;
+                dutyInMins = (r % 1440 + 1440) % 1440;
+            } else if (allowedOtIn && (shiftInMins - nInMins > 59)) {
+                // Early OT: Round UP to nearest 30 mins (Reward)
+                let r = Math.ceil(nInMins / 30) * 30;
+                dutyInMins = (r % 1440 + 1440) % 1440;
+            } else {
+                // Normal / Grace period
                 dutyInMins = shiftInMins;
+            }
         }
-        dutyOutMins = Math.floor(outMins / 30) * 30;
 
-        // If outTime is smaller, it crossed midnight (next day)
+        // OUT TIME LOGIC
+        if (shiftOutMins !== null && shiftInMins !== null) {
+            let nOutMins = outMins;
+            if (outMins < inMins) nOutMins += 1440;
+
+            let nShiftOut = shiftOutMins;
+            if (shiftOutMins < shiftInMins) nShiftOut += 1440;
+
+            if (nOutMins < nShiftOut) {
+                // Early Leaver: Round DOWN to nearest 30 mins (Penalty)
+                let r = Math.floor(nOutMins / 30) * 30;
+                dutyOutMins = (r % 1440 + 1440) % 1440;
+            } else if (allowedOtOut) {
+                // OT Out: Round DOWN to nearest 30 mins (Reward)
+                let r = Math.floor(nOutMins / 30) * 30;
+                dutyOutMins = (r % 1440 + 1440) % 1440;
+            } else {
+                // Normal departure (no OT)
+                dutyOutMins = shiftOutMins;
+            }
+        } else if (shiftOutMins !== null) {
+            dutyOutMins = shiftOutMins;
+        }
+
+        // Calculate Difference
         let diffMins = dutyOutMins - dutyInMins;
-        if (outMins < inMins) {
-            diffMins += 24 * 60;
+        if (dutyOutMins < dutyInMins) {
+            diffMins += 1440;
         } else if (diffMins < 0) {
             diffMins = 0;
         }
@@ -305,7 +334,6 @@ function calculateHours(inTimeStr, outTimeStr, shiftStr, shiftInStr, addLunch) {
             totalHours = Math.max(0, totalHours - 1);
         }
 
-        // Lunch hour is not to be calculated by the app's end, so netHours = totalHours
         let netHours = totalHours;
         let otHours = totalHours > 8 ? totalHours - 8 : 0;
         let dutyHours = totalHours - otHours;
@@ -340,9 +368,11 @@ function reprocessData() {
             const outTime = row.punchOut;
             const shift = row.shift;
             const shiftIn = row.shiftIn;
+            const shiftOut = row.shiftOut;
+            const employeeId = row.sp_no;
 
             if (inTime && outTime && inTime !== 'N/A' && outTime !== 'N/A') {
-                const calc = calculateHours(inTime, outTime, shift, shiftIn, addLunch);
+                const calc = calculateHours(inTime, outTime, shift, shiftIn, shiftOut, addLunch, employeeId);
                 row.dutyHours = calc.dutyHours;
                 row.otHours = calc.otHours;
                 row.totalHours = calc.netHours;
@@ -515,6 +545,9 @@ function toggleDateSort() {
 // Render table functions
 function renderTable() {
     try {
+        const btnExit = document.getElementById('btnExitAggregate');
+        if (btnExit) btnExit.style.display = 'none';
+
         if (employeeData.length === 0) return;
 
         const thead = document.querySelector('#dataTable thead');
@@ -737,6 +770,8 @@ function employeewiseTotalHours() {
         const resultData = getEmployeeAggregatedData();
         if (resultData.length === 0) return;
         renderAggregatedTable(resultData, ['SL.NO.', 'Safety Pass No', 'Employee Name', 'Total Hours', 'Total Shifts']);
+        const btnExit = document.getElementById('btnExitAggregate');
+        if (btnExit) btnExit.style.display = 'flex';
     } catch (err) {
         console.error('employeewiseTotalHours error:', err);
     }
@@ -747,6 +782,8 @@ function skillwiseTotalHours() {
         const resultData = getSkillAggregatedData();
         if (resultData.length === 0) return;
         renderAggregatedTable(resultData, ['SL.NO.', 'Skill Level', 'Total Hours', 'Total Shifts']);
+        const btnExit = document.getElementById('btnExitAggregate');
+        if (btnExit) btnExit.style.display = 'flex';
     } catch (err) {
         console.error('skillwiseTotalHours error:', err);
     }
