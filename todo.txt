@@ -30,3 +30,8 @@ v3.5
 1. Assign Shift based on nearest time. Do not consider CLM. -> use mean of nearest time else, 1h+ for far-away shifts.
 2. Use allowed shifts array.
 3. Sort date in final report.
+
+v4
+19/03:
+1. Allow OT based on allowedOT array for IN and/or OUT. Implement this in hours calculation logic.
+2. Separate OT calc. function.

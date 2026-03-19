@@ -47,9 +47,10 @@ let employeeData = [
     }
 ]
 */
+//----------------------------------------
 
 
-//IP FNS
+//FILE INPUT & INGEST FUNCTIONS
 //file upload
 async function handleFileSelect(event) {
     try {
@@ -241,11 +242,10 @@ async function processFile(file) {
         statusItem.querySelector('.status-text').textContent = 'Failed';
     }
 }
-
-//PROCESSING FNS
 //----------------------------------------
-//hours calc fn
 
+//DATA PROCESSING (MAIN) FUNCTIONS
+//hours calc fn
 function calculateHours(inTimeStr, outTimeStr, shiftStr, shiftInStr, addLunch) {
     try {
         if (!inTimeStr || !outTimeStr || String(inTimeStr).toLowerCase() === 'off' || String(outTimeStr).toLowerCase() === 'off') {
@@ -329,6 +329,7 @@ function calculateHours(inTimeStr, outTimeStr, shiftStr, shiftInStr, addLunch) {
     }
 }
 
+//reload data on page refresh
 function reprocessData() {
     try {
         const addLunch = addLunchCheckbox ? addLunchCheckbox.checked : false;
@@ -354,7 +355,7 @@ function reprocessData() {
 }
 
 // Assigns the correct shift by finding the nearest shiftIn to punchIn.
-// punchIn should lie between shiftIn-120mins and shiftIn+120mins
+// punchIn should lie between shiftIn-120mins and shiftIn+120mins(?)
 function assignShift(employeeId, punchIn, punchOut) {
     try {
         // Get allowed shifts for this employee from employee_details
@@ -420,9 +421,9 @@ function assignShift(employeeId, punchIn, punchOut) {
         return 'NA';
     }
 }
-
 //----------------------------------------
-//NORMALISATION FNS
+
+//DATE, TIME NORMALISATION FUNCTIONS
 // Converts standard "hh:mm AM/PM" format to minutes since midnight
 function parseTimeFormatToMinutes(timeStr) {
     try {
@@ -477,19 +478,7 @@ function normalizeDate(dateStr) {
         return 'N/A';
     }
 }
-
 //----------------------------------------
-// SORTING FNS
-function toggleDateSort() {
-    try {
-        if (dateSortOrder === 'none') dateSortOrder = 'asc';
-        else if (dateSortOrder === 'asc') dateSortOrder = 'desc';
-        else dateSortOrder = 'none';
-        renderTable();
-    } catch (err) {
-        console.error('toggleDateSort error:', err);
-    }
-}
 
 // Parses date string (dd-mm-yyyy or dd/mm/yyyy) into a sortable timestamp
 function parseSortableDate(dateStr) {
@@ -508,10 +497,22 @@ function parseSortableDate(dateStr) {
         return 0;
     }
 }
-
 //----------------------------------------
+
 //OP FNS
-// Render table function
+// Sorting Date
+function toggleDateSort() {
+    try {
+        if (dateSortOrder === 'none') dateSortOrder = 'asc';
+        else if (dateSortOrder === 'asc') dateSortOrder = 'desc';
+        else dateSortOrder = 'none';
+        renderTable();
+    } catch (err) {
+        console.error('toggleDateSort error:', err);
+    }
+}
+
+// Render table functions
 function renderTable() {
     try {
         if (employeeData.length === 0) return;
@@ -654,7 +655,9 @@ function renderAggregatedTable(data, columns) {
         console.error('renderAggregatedTable error:', err);
     }
 }
+//----------------------------------------
 
+// AGGREGATE FNS
 function getEmployeeAggregatedData() {
     try {
         if (employeeData.length === 0) return [];
@@ -691,9 +694,6 @@ function getEmployeeAggregatedData() {
         return [];
     }
 }
-
-//--------------------------------
-// AGGREGATE FNS
 
 function getSkillAggregatedData() {
     try {
